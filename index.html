@@ -295,11 +295,22 @@ function aggregateExact(daily, start, end) {
 
 const FUNNEL_STAGES = [
   { key: "cmi", label: "Conversaciones" },
-  { key: "agendas", label: "Agendas" },
+  // thresholds: [limite_rojo, limite_amarillo] sobre el % de conversión respecto a la etapa anterior.
+  // <= rojo  => rojo;  entre rojo y amarillo => amarillo;  > amarillo => verde.
+  { key: "agendas", label: "Agendas", thresholds: [5, 10] },
   { key: "citas", label: "Citas" },
-  { key: "asistencias", label: "Asistencias" },
-  { key: "cierres", label: "Cierres" },
+  { key: "asistencias", label: "Asistencias", thresholds: [25, 50] },
+  { key: "cierres", label: "Cierres", thresholds: [35, 55] },
 ];
+
+const PCT_COLORS = { rojo: "#B54A3F", amarillo: "#C9922E", verde: "#0E7C7B" };
+function pctColor(pctValue, thresholds) {
+  if (!thresholds) return PCT_COLORS.verde; // etapas sin umbral: color neutro
+  const [rojoMax, amarilloMax] = thresholds;
+  if (pctValue <= rojoMax) return PCT_COLORS.rojo;
+  if (pctValue <= amarilloMax) return PCT_COLORS.amarillo;
+  return PCT_COLORS.verde;
+}
 
 function Dashboard() {
   const [daily, setDaily] = useState(FALLBACK_DAILY);
@@ -508,11 +519,13 @@ function Dashboard() {
               const val = funnelValues[s.key];
               const width = Math.max(8, (val / funnelMax) * 100);
               const prevVal = i === 0 ? val : funnelValues[FUNNEL_STAGES[i - 1].key];
-              const convPct = prevVal ? ((val / prevVal) * 100).toFixed(0) : 100;
+              const convPctNum = prevVal ? (val / prevVal) * 100 : 100;
+              const convPct = i === 0 ? 100 : convPctNum.toFixed(0);
+              const color = i === 0 ? PCT_COLORS.verde : pctColor(convPctNum, s.thresholds);
               return (
                 <div key={s.key} style={styles.funnelRow}>
                   <div style={styles.funnelLabelCol}>
-                    <div style={styles.funnelPct}>{i === 0 ? "100%" : convPct + "%"}</div>
+                    <div style={{ ...styles.funnelPct, color }}>{convPct}%</div>
                     <div style={styles.funnelLabel}>{s.label}</div>
                   </div>
                   <div style={styles.funnelTrack}>
