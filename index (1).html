@@ -1,0 +1,705 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Clínica Odontovida — Panel de Resultados</title>
+<script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script crossorigin src="https://unpkg.com/prop-types@15/prop-types.min.js"></script>
+<script crossorigin src="https://unpkg.com/recharts@2/umd/Recharts.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<style>
+  html, body { margin: 0; padding: 0; background: #F5F7F6; }
+  #root { min-height: 100vh; }
+</style>
+</head>
+<body>
+<div id="root">
+  <div style="display:flex;align-items:center;justify-content:center;height:100vh;font-family:sans-serif;color:#5B6E6B;">
+    Cargando panel...
+  </div>
+</div>
+<script type="text/plain" id="app-source">
+
+const { useState, useEffect, useMemo } = React;
+const { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, Area, AreaChart } = Recharts;
+
+// ---- Snapshot de respaldo (usado mientras carga la conexión en vivo, o si falla) ----
+// Mismos datos reales cargados manualmente el 27/07/2026. Si la conexión en vivo funciona,
+// esto se reemplaza automáticamente por los datos frescos del Google Sheets.
+const FALLBACK_DAILY = [
+  {d:"2026-01-01",inv:0,imp:0,clk:0,cmi:0,ag:0,ci:0,asi:0,cie:0,ven:0,fac:0},
+  {d:"2026-01-02",inv:0,imp:0,clk:0,cmi:0,ag:0,ci:0,asi:0,cie:0,ven:0,fac:0},
+  {d:"2026-01-03",inv:0,imp:0,clk:0,cmi:0,ag:0,ci:0,asi:0,cie:0,ven:0,fac:0},
+  {d:"2026-01-04",inv:0,imp:0,clk:0,cmi:0,ag:0,ci:0,asi:0,cie:0,ven:0,fac:0},
+  {d:"2026-01-05",inv:0,imp:0,clk:0,cmi:30,ag:10,ci:3,asi:3,cie:3,ven:919990,fac:556000},
+  {d:"2026-01-06",inv:0,imp:0,clk:0,cmi:33,ag:7,ci:6,asi:6,cie:4,ven:1055000,fac:1055000},
+  {d:"2026-01-07",inv:0,imp:0,clk:0,cmi:24,ag:8,ci:2,asi:2,cie:2,ven:495000,fac:305000},
+  {d:"2026-01-08",inv:0,imp:0,clk:0,cmi:28,ag:4,ci:5,asi:4,cie:2,ven:545000,fac:380000},
+  {d:"2026-01-09",inv:0,imp:0,clk:0,cmi:21,ag:4,ci:3,asi:3,cie:2,ven:470000,fac:470000},
+  {d:"2026-01-10",inv:0,imp:0,clk:0,cmi:0,ag:1,ci:4,asi:4,cie:4,ven:581000,fac:581000},
+  {d:"2026-01-11",inv:0,imp:0,clk:0,cmi:0,ag:0,ci:0,asi:0,cie:0,ven:0,fac:0},
+  {d:"2026-01-12",inv:0,imp:0,clk:0,cmi:36,ag:8,ci:5,asi:4,cie:2,ven:675000,fac:675000},
+  {d:"2026-01-13",inv:0,imp:0,clk:0,cmi:28,ag:3,ci:6,asi:3,cie:3,ven:1100000,fac:1100000},
+  {d:"2026-01-14",inv:0,imp:0,clk:0,cmi:29,ag:4,ci:4,asi:3,cie:2,ven:440000,fac:440000},
+  {d:"2026-01-15",inv:0,imp:0,clk:0,cmi:18,ag:6,ci:4,asi:2,cie:1,ven:300000,fac:300000},
+  {d:"2026-01-16",inv:0,imp:0,clk:0,cmi:17,ag:7,ci:5,asi:4,cie:3,ven:665000,fac:665000},
+  {d:"2026-01-17",inv:0,imp:0,clk:0,cmi:0,ag:0,ci:3,asi:2,cie:0,ven:0,fac:0},
+  {d:"2026-01-18",inv:0,imp:0,clk:0,cmi:0,ag:0,ci:0,asi:0,cie:0,ven:0,fac:0},
+  {d:"2026-01-19",inv:0,imp:0,clk:0,cmi:30,ag:8,ci:7,asi:5,cie:4,ven:995000,fac:805000},
+  {d:"2026-01-20",inv:0,imp:0,clk:0,cmi:35,ag:8,ci:4,asi:4,cie:1,ven:300000,fac:300000},
+  {d:"2026-01-21",inv:0,imp:0,clk:0,cmi:32,ag:3,ci:4,asi:1,cie:0,ven:0,fac:0},
+  {d:"2026-01-22",inv:0,imp:0,clk:0,cmi:20,ag:5,ci:3,asi:2,cie:0,ven:0,fac:80000},
+  {d:"2026-01-23",inv:0,imp:0,clk:0,cmi:20,ag:5,ci:4,asi:3,cie:1,ven:200000,fac:200000},
+  {d:"2026-01-24",inv:0,imp:0,clk:0,cmi:0,ag:0,ci:2,asi:1,cie:1,ven:280000,fac:200000},
+  {d:"2026-01-25",inv:0,imp:0,clk:0,cmi:0,ag:0,ci:0,asi:0,cie:0,ven:0,fac:0},
+  {d:"2026-01-26",inv:0,imp:0,clk:0,cmi:21,ag:5,ci:11,asi:7,cie:4,ven:1134000,fac:981500},
+  {d:"2026-01-27",inv:0,imp:0,clk:0,cmi:29,ag:5,ci:5,asi:5,cie:4,ven:1587980,fac:1412980},
+  {d:"2026-01-28",inv:0,imp:0,clk:0,cmi:23,ag:1,ci:3,asi:0,cie:0,ven:0,fac:0},
+  {d:"2026-01-29",inv:0,imp:0,clk:0,cmi:23,ag:2,ci:1,asi:0,cie:0,ven:0,fac:0},
+  {d:"2026-01-30",inv:0,imp:0,clk:0,cmi:0,ag:1,ci:1,asi:1,cie:0,ven:0,fac:0},
+  {d:"2026-01-31",inv:0,imp:0,clk:0,cmi:0,ag:0,ci:4,asi:2,cie:1,ven:270000,fac:270000},
+  {d:"2026-02-01",inv:0,imp:0,clk:0,cmi:0,ag:0,ci:0,asi:0,cie:0,ven:0,fac:0},
+  {d:"2026-02-02",inv:24393,imp:12374,clk:55,cmi:26,ag:4,ci:4,asi:2,cie:2,ven:1329990,fac:1120000},
+  {d:"2026-02-03",inv:25521,imp:12243,clk:76,cmi:31,ag:9,ci:2,asi:2,cie:1,ven:370000,fac:370000},
+  {d:"2026-02-04",inv:18649,imp:9255,clk:44,cmi:21,ag:2,ci:7,asi:6,cie:5,ven:1465000,fac:845000},
+  {d:"2026-02-05",inv:15593,imp:8960,clk:57,cmi:23,ag:0,ci:4,asi:2,cie:1,ven:350000,fac:350000},
+  {d:"2026-02-06",inv:17593,imp:10537,clk:53,cmi:17,ag:5,ci:2,asi:1,cie:1,ven:200000,fac:200000},
+  {d:"2026-02-07",inv:0,imp:0,clk:0,cmi:0,ag:0,ci:0,asi:0,cie:0,ven:0,fac:0},
+  {d:"2026-02-08",inv:0,imp:0,clk:0,cmi:0,ag:0,ci:0,asi:0,cie:0,ven:0,fac:0},
+  {d:"2026-02-09",inv:28183,imp:14477,clk:73,cmi:30,ag:5,ci:6,asi:4,cie:2,ven:780000,fac:385000},
+  {d:"2026-02-10",inv:26892,imp:13083,clk:78,cmi:28,ag:4,ci:3,asi:3,cie:3,ven:489990,fac:394990},
+  {d:"2026-02-11",inv:15335,imp:6897,clk:37,cmi:20,ag:3,ci:1,asi:1,cie:1,ven:280000,fac:280000},
+  {d:"2026-02-12",inv:17477,imp:8468,clk:50,cmi:22,ag:0,ci:2,asi:2,cie:2,ven:425000,fac:275000},
+  {d:"2026-02-13",inv:12960,imp:6300,clk:47,cmi:22,ag:2,ci:1,asi:0,cie:0,ven:0,fac:0},
+  {d:"2026-02-14",inv:0,imp:0,clk:0,cmi:0,ag:0,ci:2,asi:2,cie:1,ven:310000,fac:310000},
+  {d:"2026-02-15",inv:0,imp:0,clk:0,cmi:0,ag:0,ci:0,asi:0,cie:0,ven:0,fac:0},
+  {d:"2026-02-16",inv:27031,imp:13851,clk:56,cmi:19,ag:8,ci:5,asi:3,cie:2,ven:925000,fac:725000},
+  {d:"2026-02-17",inv:25660,imp:11169,clk:67,cmi:22,ag:4,ci:1,asi:1,cie:1,ven:200000,fac:200000},
+  {d:"2026-02-18",inv:18879,imp:7133,clk:63,cmi:30,ag:2,ci:3,asi:3,cie:1,ven:515000,fac:250000},
+  {d:"2026-02-19",inv:16010,imp:7773,clk:45,cmi:13,ag:1,ci:5,asi:4,cie:1,ven:200000,fac:200000},
+  {d:"2026-02-20",inv:14894,imp:7216,clk:51,cmi:26,ag:6,ci:3,asi:1,cie:1,ven:200000,fac:200000},
+  {d:"2026-02-21",inv:0,imp:0,clk:0,cmi:0,ag:0,ci:3,asi:0,cie:0,ven:0,fac:0},
+  {d:"2026-02-22",inv:0,imp:0,clk:0,cmi:0,ag:0,ci:0,asi:0,cie:0,ven:0,fac:0},
+  {d:"2026-02-23",inv:27171,imp:11641,clk:75,cmi:26,ag:9,ci:0,asi:0,cie:0,ven:0,fac:0},
+  {d:"2026-02-24",inv:26380,imp:11948,clk:80,cmi:32,ag:5,ci:0,asi:0,cie:0,ven:0,fac:0},
+  {d:"2026-02-25",inv:18472,imp:8887,clk:49,cmi:19,ag:4,ci:0,asi:0,cie:0,ven:0,fac:0},
+  {d:"2026-02-26",inv:16532,imp:8149,clk:56,cmi:26,ag:4,ci:0,asi:0,cie:0,ven:0,fac:0},
+  {d:"2026-02-27",inv:13632,imp:6203,clk:40,cmi:21,ag:4,ci:0,asi:0,cie:0,ven:0,fac:0},
+  {d:"2026-02-28",inv:0,imp:0,clk:0,cmi:0,ag:0,ci:0,asi:0,cie:0,ven:0,fac:0},
+  {d:"2026-03-01",inv:0,imp:0,clk:0,cmi:0,ag:0,ci:0,asi:0,cie:0,ven:0,fac:0},
+  {d:"2026-03-02",inv:25870,imp:10379,clk:56,cmi:25,ag:6,ci:7,asi:4,cie:1,ven:770000,fac:575000},
+  {d:"2026-03-03",inv:23491,imp:11937,clk:53,cmi:32,ag:6,ci:9,asi:5,cie:1,ven:178000,fac:108000},
+  {d:"2026-03-04",inv:20700,imp:10097,clk:56,cmi:26,ag:5,ci:9,asi:5,cie:4,ven:960000,fac:580000},
+  {d:"2026-03-05",inv:17142,imp:8452,clk:49,cmi:21,ag:2,ci:14,asi:10,cie:6,ven:1295000,fac:835000},
+  {d:"2026-03-06",inv:15249,imp:7186,clk:47,cmi:18,ag:7,ci:8,asi:5,cie:1,ven:270000,fac:230000},
+  {d:"2026-03-07",inv:0,imp:0,clk:0,cmi:0,ag:0,ci:7,asi:5,cie:4,ven:965000,fac:405000},
+  {d:"2026-03-08",inv:0,imp:0,clk:0,cmi:0,ag:0,ci:0,asi:0,cie:0,ven:0,fac:0},
+  {d:"2026-03-09",inv:21580,imp:9904,clk:42,cmi:17,ag:3,ci:1,asi:1,cie:0,ven:0,fac:0},
+  {d:"2026-03-10",inv:27224,imp:13442,clk:88,cmi:31,ag:3,ci:3,asi:3,cie:1,ven:295000,fac:270000},
+  {d:"2026-03-11",inv:20425,imp:10988,clk:57,cmi:19,ag:5,ci:1,asi:1,cie:0,ven:0,fac:0},
+  {d:"2026-03-12",inv:20163,imp:11601,clk:47,cmi:15,ag:5,ci:2,asi:2,cie:2,ven:540000,fac:310000},
+  {d:"2026-03-13",inv:13624,imp:6427,clk:32,cmi:13,ag:3,ci:4,asi:3,cie:2,ven:650000,fac:232500},
+  {d:"2026-03-14",inv:0,imp:0,clk:0,cmi:0,ag:0,ci:3,asi:1,cie:1,ven:400000,fac:400000},
+  {d:"2026-03-15",inv:0,imp:0,clk:0,cmi:0,ag:0,ci:0,asi:0,cie:0,ven:0,fac:0},
+  {d:"2026-03-16",inv:25329,imp:9744,clk:43,cmi:23,ag:4,ci:4,asi:3,cie:1,ven:200000,fac:100000},
+  {d:"2026-03-17",inv:22583,imp:9362,clk:62,cmi:21,ag:4,ci:4,asi:3,cie:1,ven:575000,fac:575000},
+  {d:"2026-03-18",inv:19454,imp:8196,clk:56,cmi:24,ag:2,ci:6,asi:3,cie:1,ven:200000,fac:200000},
+  {d:"2026-03-19",inv:18595,imp:7683,clk:38,cmi:20,ag:6,ci:1,asi:1,cie:1,ven:395000,fac:395000},
+  {d:"2026-03-20",inv:14781,imp:7018,clk:30,cmi:14,ag:3,ci:4,asi:2,cie:0,ven:0,fac:0},
+  {d:"2026-03-21",inv:0,imp:0,clk:0,cmi:0,ag:0,ci:1,asi:0,cie:0,ven:0,fac:0},
+  {d:"2026-03-22",inv:0,imp:0,clk:0,cmi:0,ag:0,ci:0,asi:0,cie:0,ven:0,fac:0},
+  {d:"2026-03-23",inv:26749,imp:11513,clk:62,cmi:16,ag:6,ci:6,asi:4,cie:3,ven:625000,fac:405000},
+  {d:"2026-03-24",inv:24001,imp:10892,clk:44,cmi:27,ag:8,ci:5,asi:3,cie:3,ven:1270000,fac:615000},
+  {d:"2026-03-25",inv:18618,imp:8166,clk:51,cmi:20,ag:1,ci:4,asi:3,cie:2,ven:660000,fac:340000},
+  {d:"2026-03-26",inv:17242,imp:7571,clk:36,cmi:18,ag:2,ci:1,asi:1,cie:1,ven:432000,fac:332000},
+  {d:"2026-03-27",inv:16670,imp:8249,clk:43,cmi:9,ag:0,ci:2,asi:1,cie:0,ven:0,fac:0},
+  {d:"2026-03-28",inv:0,imp:0,clk:0,cmi:0,ag:0,ci:4,asi:4,cie:3,ven:865000,fac:740000},
+  {d:"2026-03-29",inv:0,imp:0,clk:0,cmi:0,ag:0,ci:0,asi:0,cie:0,ven:0,fac:0},
+  {d:"2026-03-30",inv:24944,imp:12146,clk:42,cmi:18,ag:6,ci:3,asi:3,cie:2,ven:310000,fac:310000},
+  {d:"2026-03-31",inv:23573,imp:9570,clk:48,cmi:22,ag:3,ci:1,asi:0,cie:0,ven:0,fac:0},
+  {d:"2026-04-01",inv:20050,imp:7815,clk:43,cmi:21,ag:1,ci:5,asi:4,cie:2,ven:395000,fac:275000},
+  {d:"2026-04-02",inv:16966,imp:7366,clk:52,cmi:26,ag:4,ci:4,asi:3,cie:1,ven:430000,fac:430000},
+  {d:"2026-04-03",inv:18269,imp:8483,clk:44,cmi:19,ag:2,ci:1,asi:1,cie:1,ven:300000,fac:300000},
+  {d:"2026-04-04",inv:0,imp:0,clk:0,cmi:0,ag:0,ci:0,asi:0,cie:0,ven:0,fac:0},
+  {d:"2026-04-05",inv:0,imp:0,clk:0,cmi:0,ag:0,ci:0,asi:0,cie:0,ven:0,fac:0},
+  {d:"2026-04-06",inv:20461,imp:10223,clk:49,cmi:17,ag:2,ci:3,asi:2,cie:2,ven:375000,fac:375000},
+  {d:"2026-04-07",inv:17647,imp:8929,clk:49,cmi:27,ag:7,ci:3,asi:1,cie:0,ven:0,fac:0},
+  {d:"2026-04-08",inv:16105,imp:8278,clk:27,cmi:11,ag:3,ci:8,asi:8,cie:5,ven:2946000,fac:2330000},
+  {d:"2026-04-09",inv:16281,imp:8668,clk:42,cmi:22,ag:2,ci:1,asi:1,cie:1,ven:530000,fac:530000},
+  {d:"2026-04-10",inv:13041,imp:7367,clk:57,cmi:14,ag:1,ci:1,asi:1,cie:0,ven:0,fac:0},
+  {d:"2026-04-11",inv:0,imp:0,clk:0,cmi:0,ag:0,ci:1,asi:1,cie:1,ven:225000,fac:100000},
+  {d:"2026-04-12",inv:0,imp:0,clk:0,cmi:0,ag:0,ci:0,asi:0,cie:0,ven:0,fac:0},
+  {d:"2026-04-13",inv:28663,imp:10289,clk:42,cmi:21,ag:3,ci:2,asi:1,cie:0,ven:0,fac:0},
+  {d:"2026-04-14",inv:26314,imp:11336,clk:60,cmi:27,ag:5,ci:1,asi:1,cie:1,ven:270000,fac:100000},
+  {d:"2026-04-15",inv:17663,imp:8431,clk:41,cmi:14,ag:5,ci:4,asi:3,cie:2,ven:570000,fac:570000},
+  {d:"2026-04-16",inv:17461,imp:9816,clk:49,cmi:15,ag:3,ci:4,asi:4,cie:0,ven:0,fac:0},
+  {d:"2026-04-17",inv:12372,imp:6630,clk:32,cmi:11,ag:6,ci:2,asi:2,cie:0,ven:0,fac:0},
+  {d:"2026-04-18",inv:0,imp:0,clk:0,cmi:0,ag:0,ci:1,asi:1,cie:1,ven:308000,fac:308000},
+  {d:"2026-04-19",inv:0,imp:0,clk:0,cmi:0,ag:0,ci:0,asi:0,cie:0,ven:0,fac:0},
+  {d:"2026-04-20",inv:27432,imp:11622,clk:67,cmi:31,ag:4,ci:8,asi:4,cie:0,ven:0,fac:38000},
+  {d:"2026-04-21",inv:24422,imp:11494,clk:47,cmi:15,ag:3,ci:2,asi:1,cie:1,ven:175000,fac:80000},
+  {d:"2026-04-22",inv:20169,imp:8750,clk:28,cmi:17,ag:3,ci:4,asi:2,cie:1,ven:225000,fac:80000},
+  {d:"2026-04-23",inv:18305,imp:7327,clk:41,cmi:23,ag:5,ci:2,asi:2,cie:2,ven:585000,fac:140000},
+  {d:"2026-04-24",inv:13197,imp:5899,clk:22,cmi:14,ag:7,ci:4,asi:4,cie:1,ven:500000,fac:500000},
+  {d:"2026-04-25",inv:0,imp:0,clk:0,cmi:0,ag:0,ci:5,asi:3,cie:1,ven:500000,fac:500000},
+  {d:"2026-04-26",inv:0,imp:0,clk:0,cmi:0,ag:0,ci:0,asi:0,cie:0,ven:0,fac:0},
+  {d:"2026-04-27",inv:24900,imp:10115,clk:42,cmi:14,ag:4,ci:3,asi:1,cie:1,ven:295000,fac:235000},
+  {d:"2026-04-28",inv:19830,imp:8397,clk:38,cmi:15,ag:3,ci:5,asi:4,cie:1,ven:420000,fac:420000},
+  {d:"2026-04-29",inv:23352,imp:8813,clk:42,cmi:21,ag:3,ci:2,asi:1,cie:1,ven:365000,fac:115000},
+  {d:"2026-04-30",inv:6566,imp:2370,clk:16,cmi:6,ag:0,ci:6,asi:1,cie:0,ven:0,fac:0},
+  {d:"2026-05-01",inv:0,imp:0,clk:0,cmi:0,ag:0,ci:1,asi:0,cie:0,ven:0,fac:0},
+  {d:"2026-05-02",inv:0,imp:0,clk:0,cmi:0,ag:0,ci:0,asi:0,cie:0,ven:0,fac:0},
+  {d:"2026-05-03",inv:0,imp:0,clk:0,cmi:0,ag:0,ci:0,asi:0,cie:0,ven:0,fac:0},
+  {d:"2026-05-04",inv:17410,imp:5262,clk:35,cmi:15,ag:2,ci:0,asi:0,cie:0,ven:0,fac:0},
+  {d:"2026-05-05",inv:21072,imp:9016,clk:57,cmi:22,ag:3,ci:1,asi:1,cie:0,ven:0,fac:0},
+  {d:"2026-05-06",inv:17237,imp:7685,clk:53,cmi:20,ag:6,ci:2,asi:2,cie:1,ven:270000,fac:230000},
+  {d:"2026-05-07",inv:14087,imp:6925,clk:46,cmi:15,ag:6,ci:5,asi:3,cie:3,ven:1000000,fac:810000},
+  {d:"2026-05-08",inv:12567,imp:5934,clk:36,cmi:15,ag:2,ci:2,asi:2,cie:0,ven:0,fac:0},
+  {d:"2026-05-09",inv:0,imp:0,clk:0,cmi:0,ag:0,ci:3,asi:2,cie:1,ven:200000,fac:200000},
+  {d:"2026-05-10",inv:0,imp:0,clk:0,cmi:0,ag:0,ci:0,asi:0,cie:0,ven:0,fac:0},
+  {d:"2026-05-11",inv:25981,imp:10958,clk:28,cmi:10,ag:7,ci:7,asi:5,cie:2,ven:505000,fac:505000},
+  {d:"2026-05-12",inv:26900,imp:11390,clk:51,cmi:25,ag:5,ci:3,asi:2,cie:1,ven:450000,fac:450000},
+  {d:"2026-05-13",inv:20229,imp:8793,clk:40,cmi:14,ag:3,ci:2,asi:2,cie:2,ven:350000,fac:160000},
+  {d:"2026-05-14",inv:17582,imp:7949,clk:40,cmi:18,ag:6,ci:5,asi:5,cie:3,ven:1580000,fac:547500},
+  {d:"2026-05-15",inv:15626,imp:7146,clk:40,cmi:18,ag:3,ci:5,asi:4,cie:2,ven:420000,fac:180000},
+  {d:"2026-05-16",inv:0,imp:0,clk:0,cmi:0,ag:0,ci:6,asi:3,cie:3,ven:440000,fac:440000},
+  {d:"2026-05-17",inv:0,imp:0,clk:0,cmi:0,ag:0,ci:0,asi:0,cie:0,ven:0,fac:0},
+  {d:"2026-05-18",inv:22658,imp:9110,clk:43,cmi:16,ag:1,ci:2,asi:0,cie:0,ven:0,fac:0},
+  {d:"2026-05-19",inv:26445,imp:10690,clk:53,cmi:19,ag:1,ci:2,asi:1,cie:0,ven:0,fac:0},
+  {d:"2026-05-20",inv:20154,imp:10336,clk:42,cmi:21,ag:5,ci:1,asi:0,cie:0,ven:0,fac:0},
+  {d:"2026-05-21",inv:17974,imp:8086,clk:41,cmi:10,ag:2,ci:0,asi:0,cie:0,ven:0,fac:0},
+  {d:"2026-05-22",inv:17687,imp:8514,clk:41,cmi:20,ag:8,ci:7,asi:5,cie:3,ven:1230000,fac:426000},
+  {d:"2026-05-23",inv:0,imp:0,clk:0,cmi:0,ag:0,ci:2,asi:2,cie:2,ven:608000,fac:483000},
+  {d:"2026-05-24",inv:0,imp:0,clk:0,cmi:0,ag:0,ci:0,asi:0,cie:0,ven:0,fac:0},
+  {d:"2026-05-25",inv:23108,imp:9781,clk:46,cmi:22,ag:4,ci:2,asi:2,cie:2,ven:588000,fac:493000},
+  {d:"2026-05-26",inv:25302,imp:11572,clk:86,cmi:34,ag:4,ci:2,asi:1,cie:1,ven:475000,fac:475000},
+  {d:"2026-05-27",inv:23067,imp:11118,clk:57,cmi:20,ag:6,ci:4,asi:3,cie:1,ven:170000,fac:80000},
+  {d:"2026-05-28",inv:17785,imp:8165,clk:48,cmi:21,ag:7,ci:4,asi:2,cie:1,ven:200000,fac:170000},
+  {d:"2026-05-29",inv:15384,imp:7503,clk:48,cmi:18,ag:0,ci:5,asi:5,cie:1,ven:260000,fac:240000},
+  {d:"2026-05-30",inv:0,imp:0,clk:0,cmi:0,ag:0,ci:4,asi:1,cie:1,ven:500000,fac:275000},
+  {d:"2026-05-31",inv:0,imp:0,clk:0,cmi:0,ag:0,ci:0,asi:0,cie:0,ven:0,fac:0},
+  {d:"2026-06-01",inv:22772,imp:6550,clk:43,cmi:18,ag:2,ci:0,asi:0,cie:0,ven:0,fac:0},
+  {d:"2026-06-02",inv:25277,imp:7471,clk:43,cmi:22,ag:6,ci:4,asi:2,cie:2,ven:450000,fac:200000},
+  {d:"2026-06-03",inv:21789,imp:6309,clk:40,cmi:13,ag:4,ci:0,asi:0,cie:0,ven:0,fac:0},
+  {d:"2026-06-04",inv:17863,imp:6373,clk:39,cmi:11,ag:4,ci:9,asi:5,cie:2,ven:1200000,fac:406000},
+  {d:"2026-06-05",inv:18433,imp:8521,clk:38,cmi:16,ag:2,ci:5,asi:2,cie:1,ven:365000,fac:230000},
+  {d:"2026-06-06",inv:0,imp:0,clk:0,cmi:0,ag:0,ci:5,asi:3,cie:3,ven:860000,fac:695000},
+  {d:"2026-06-07",inv:0,imp:0,clk:0,cmi:0,ag:0,ci:0,asi:0,cie:0,ven:0,fac:0},
+  {d:"2026-06-08",inv:28333,imp:12261,clk:50,cmi:18,ag:4,ci:0,asi:0,cie:0,ven:0,fac:0},
+  {d:"2026-06-09",inv:28469,imp:13399,clk:74,cmi:27,ag:6,ci:6,asi:6,cie:4,ven:985000,fac:460000},
+  {d:"2026-06-10",inv:19396,imp:9397,clk:54,cmi:18,ag:8,ci:3,asi:2,cie:2,ven:620000,fac:550000},
+  {d:"2026-06-11",inv:16435,imp:7418,clk:46,cmi:17,ag:6,ci:3,asi:3,cie:1,ven:250000,fac:170000},
+  {d:"2026-06-12",inv:11790,imp:5506,clk:34,cmi:11,ag:4,ci:8,asi:7,cie:7,ven:2742000,fac:1370000},
+  {d:"2026-06-13",inv:3337,imp:1355,clk:6,cmi:2,ag:0,ci:3,asi:2,cie:2,ven:290000,fac:80000},
+  {d:"2026-06-14",inv:0,imp:0,clk:0,cmi:0,ag:0,ci:0,asi:0,cie:0,ven:0,fac:0},
+  {d:"2026-06-15",inv:26681,imp:12220,clk:37,cmi:16,ag:4,ci:3,asi:2,cie:0,ven:0,fac:0},
+  {d:"2026-06-16",inv:22643,imp:13380,clk:37,cmi:10,ag:2,ci:4,asi:3,cie:2,ven:955000,fac:835000},
+  {d:"2026-06-17",inv:24481,imp:10145,clk:59,cmi:26,ag:5,ci:4,asi:2,cie:0,ven:0,fac:0},
+  {d:"2026-06-18",inv:15638,imp:6281,clk:33,cmi:9,ag:3,ci:1,asi:1,cie:1,ven:275000,fac:105000},
+  {d:"2026-06-19",inv:12794,imp:5615,clk:27,cmi:5,ag:0,ci:0,asi:0,cie:0,ven:0,fac:0},
+  {d:"2026-06-20",inv:0,imp:0,clk:0,cmi:0,ag:0,ci:2,asi:1,cie:1,ven:419990,fac:260000},
+  {d:"2026-06-21",inv:0,imp:0,clk:0,cmi:0,ag:0,ci:0,asi:0,cie:0,ven:0,fac:0},
+  {d:"2026-06-22",inv:22595,imp:8822,clk:45,cmi:17,ag:0,ci:0,asi:0,cie:0,ven:0,fac:0},
+  {d:"2026-06-23",inv:28656,imp:11288,clk:49,cmi:24,ag:7,ci:4,asi:3,cie:3,ven:1014990,fac:340000},
+  {d:"2026-06-24",inv:19966,imp:8908,clk:40,cmi:18,ag:3,ci:1,asi:1,cie:1,ven:1025000,fac:1000000},
+  {d:"2026-06-25",inv:17145,imp:7944,clk:39,cmi:13,ag:2,ci:3,asi:2,cie:1,ven:175000,fac:85000},
+  {d:"2026-06-26",inv:12801,imp:6684,clk:35,cmi:15,ag:2,ci:3,asi:3,cie:0,ven:0,fac:0},
+  {d:"2026-06-27",inv:0,imp:0,clk:0,cmi:0,ag:0,ci:3,asi:1,cie:0,ven:0,fac:0},
+  {d:"2026-06-28",inv:0,imp:0,clk:0,cmi:0,ag:0,ci:0,asi:0,cie:0,ven:0,fac:0},
+  {d:"2026-06-29",inv:23580,imp:8858,clk:36,cmi:16,ag:2,ci:0,asi:0,cie:0,ven:0,fac:0},
+  {d:"2026-06-30",inv:27837,imp:11993,clk:48,cmi:17,ag:4,ci:3,asi:2,cie:2,ven:1020000,fac:310000},
+  {d:"2026-07-01",inv:22448,imp:10416,clk:52,cmi:25,ag:1,ci:4,asi:1,cie:1,ven:515000,fac:115000},
+  {d:"2026-07-02",inv:17005,imp:7995,clk:48,cmi:18,ag:3,ci:4,asi:3,cie:0,ven:0,fac:0},
+  {d:"2026-07-03",inv:13432,imp:7478,clk:28,cmi:15,ag:1,ci:4,asi:4,cie:1,ven:429980,fac:429980},
+  {d:"2026-07-04",inv:0,imp:0,clk:0,cmi:0,ag:0,ci:1,asi:1,cie:1,ven:345000,fac:272500},
+  {d:"2026-07-05",inv:0,imp:0,clk:0,cmi:0,ag:0,ci:0,asi:0,cie:0,ven:0,fac:0},
+  {d:"2026-07-06",inv:21700,imp:10187,clk:24,cmi:10,ag:5,ci:1,asi:1,cie:0,ven:0,fac:0},
+  {d:"2026-07-07",inv:24321,imp:11338,clk:45,cmi:17,ag:4,ci:5,asi:4,cie:4,ven:1835000,fac:1040000},
+  {d:"2026-07-08",inv:22172,imp:10468,clk:43,cmi:22,ag:8,ci:3,asi:3,cie:3,ven:490000,fac:220000},
+  {d:"2026-07-09",inv:19003,imp:10586,clk:211,cmi:16,ag:2,ci:1,asi:1,cie:1,ven:175000,fac:175000},
+  {d:"2026-07-10",inv:14176,imp:7919,clk:164,cmi:17,ag:1,ci:5,asi:3,cie:3,ven:985000,fac:340000},
+  {d:"2026-07-11",inv:0,imp:0,clk:0,cmi:0,ag:0,ci:2,asi:2,cie:1,ven:308000,fac:160000},
+  {d:"2026-07-12",inv:0,imp:0,clk:0,cmi:0,ag:0,ci:0,asi:0,cie:0,ven:0,fac:0},
+  {d:"2026-07-13",inv:17604,imp:7006,clk:151,cmi:11,ag:2,ci:2,asi:1,cie:1,ven:200000,fac:175000},
+  {d:"2026-07-14",inv:25008,imp:16857,clk:251,cmi:19,ag:4,ci:2,asi:1,cie:1,ven:275000,fac:130000},
+  {d:"2026-07-15",inv:21197,imp:14599,clk:238,cmi:9,ag:2,ci:0,asi:0,cie:0,ven:0,fac:0},
+  {d:"2026-07-16",inv:14623,imp:8969,clk:30,cmi:11,ag:2,ci:0,asi:0,cie:0,ven:0,fac:0},
+  {d:"2026-07-17",inv:6106,imp:6899,clk:19,cmi:11,ag:0,ci:0,asi:0,cie:0,ven:0,fac:0},
+  {d:"2026-07-18",inv:29585,imp:19530,clk:73,cmi:19,ag:0,ci:3,asi:1,cie:1,ven:270000,fac:270000},
+  {d:"2026-07-19",inv:16623,imp:8963,clk:183,cmi:12,ag:0,ci:0,asi:0,cie:0,ven:0,fac:0},
+  {d:"2026-07-20",inv:20110,imp:9402,clk:181,cmi:12,ag:4,ci:4,asi:0,cie:0,ven:0,fac:0},
+  {d:"2026-07-21",inv:19234,imp:10156,clk:198,cmi:13,ag:3,ci:4,asi:2,cie:2,ven:815000,fac:160000},
+  {d:"2026-07-22",inv:17734,imp:9978,clk:198,cmi:22,ag:1,ci:0,asi:0,cie:0,ven:0,fac:0},
+  {d:"2026-07-23",inv:14576,imp:7455,clk:28,cmi:6,ag:2,ci:3,asi:1,cie:1,ven:270000,fac:80000},
+  {d:"2026-07-24",inv:12447,imp:5707,clk:32,cmi:9,ag:2,ci:2,asi:0,cie:0,ven:0,fac:0},
+  {d:"2026-07-25",inv:0,imp:0,clk:0,cmi:0,ag:0,ci:2,asi:0,cie:0,ven:0,fac:0},
+  {d:"2026-07-26",inv:0,imp:0,clk:0,cmi:0,ag:0,ci:0,asi:0,cie:0,ven:0,fac:0},
+];
+
+const clp = (n) => "$" + Math.round(n).toLocaleString("es-CL");
+const pct = (n, d) => (d ? ((n / d) * 100).toFixed(1) + "%" : "\u2014");
+const money2 = (n) => (n === null || n === undefined ? "\u2014" : clp(n));
+const num2 = (n) => (n === null || n === undefined ? "\u2014" : n.toLocaleString("es-CL"));
+const rate2 = (n) => (n === null || n === undefined ? "\u2014" : n.toFixed(2).replace(".", ",") + "%");
+const mult2 = (n) => (n === null || n === undefined ? "\u2014" : n.toFixed(2) + "\u00d7");
+const fmtDate = (iso) => {
+  const [y, m, d] = iso.split("-");
+  return `${d}/${m}/${y}`;
+};
+const MONTH_LABELS = { "01": "Ene", "02": "Feb", "03": "Mar", "04": "Abr", "05": "May", "06": "Jun", "07": "Jul", "08": "Ago", "09": "Sep", "10": "Oct", "11": "Nov", "12": "Dic" };
+
+function timeAgo(iso) {
+  if (!iso) return "";
+  const diffMs = Date.now() - new Date(iso).getTime();
+  const mins = Math.round(diffMs / 60000);
+  if (mins < 1) return "justo ahora";
+  if (mins < 60) return `hace ${mins} min`;
+  const hrs = Math.round(mins / 60);
+  if (hrs < 24) return `hace ${hrs} h`;
+  return `hace ${Math.round(hrs / 24)} d`;
+}
+
+// Suma EXACTA día por día dentro de [start, end] sobre el array `daily` dado, y recalcula
+// todas las tasas/costos desde esos totales reales (nunca prorrateando ni promediando tasas).
+function aggregateExact(daily, start, end) {
+  const rows = daily.filter((r) => r.d >= start && r.d <= end);
+  const sum = (k) => rows.reduce((a, r) => a + r[k], 0);
+  const inversion = sum("inv");
+  const impresiones = sum("imp");
+  const clicks = sum("clk");
+  const cmi = sum("cmi");
+  const agendas = sum("ag");
+  const citas = sum("ci");
+  const asistencias = sum("asi");
+  const cierres = sum("cie");
+  const ventas = sum("ven");
+  const recoleccion = sum("fac");
+  return {
+    inversion, clicks, cmi, agendas, citas, asistencias, cierres, ventas, recoleccion,
+    cpm: impresiones ? (inversion / impresiones) * 1000 : null,
+    ctr: impresiones ? (clicks / impresiones) * 100 : null,
+    cmiLP: clicks ? (cmi / clicks) * 100 : null,
+    cpcmi: cmi ? inversion / cmi : null,
+    scr: cmi ? (agendas / cmi) * 100 : null,
+    asisPct: citas ? (asistencias / citas) * 100 : null,
+    asisCost: asistencias ? inversion / asistencias : null,
+    ccPct: asistencias ? (cierres / asistencias) * 100 : null,
+    cac: cierres ? inversion / cierres : null,
+    cpa: cierres ? inversion / cierres : null,
+    roas: inversion ? recoleccion / inversion : null,
+    croi: inversion ? (recoleccion - inversion) / inversion : null,
+  };
+}
+
+const FUNNEL_STAGES = [
+  { key: "agendas", label: "Agendas" },
+  { key: "citas", label: "Citas" },
+  { key: "asistencias", label: "Asistencias" },
+  { key: "cierres", label: "Cierres" },
+];
+
+function Dashboard() {
+  const [daily, setDaily] = useState(FALLBACK_DAILY);
+  const [status, setStatus] = useState("cached-initial"); // loading | live | cached-error | cached-initial
+  const [lastSync, setLastSync] = useState(null);
+  const [errorMsg, setErrorMsg] = useState(null);
+  const [rangeTouched, setRangeTouched] = useState(false);
+
+  const dailyBounds = useMemo(
+    () => ({ first: daily[0].d, last: daily[daily.length - 1].d }),
+    [daily]
+  );
+  const [range, setRange] = useState({ start: dailyBounds.first, end: dailyBounds.last });
+
+  useEffect(() => {
+    if (!rangeTouched) setRange({ start: dailyBounds.first, end: dailyBounds.last });
+  }, [dailyBounds, rangeTouched]);
+
+  const fetchLive = () => {
+    setStatus("loading");
+    fetch("/api/sheet?t=" + Date.now())
+      .then((r) => r.json())
+      .then((json) => {
+        if (json.ok && json.daily && json.daily.length) {
+          setDaily(json.daily);
+          setStatus("live");
+          setLastSync(json.syncedAt);
+          setErrorMsg(null);
+        } else {
+          setStatus("cached-error");
+          setErrorMsg(json.error || "Respuesta inválida del servidor");
+        }
+      })
+      .catch((err) => {
+        setStatus("cached-error");
+        setErrorMsg(String(err));
+      });
+  };
+
+  useEffect(() => {
+    fetchLive();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const { FIRST_DATE, LAST_DATE, MONTHLY, TOTAL } = useMemo(() => {
+    const FIRST_DATE = daily[0].d;
+    const LAST_DATE = daily[daily.length - 1].d;
+    const monthKeys = Array.from(new Set(daily.map((r) => r.d.slice(0, 7)))).sort();
+    const todayKey = new Date().toISOString().slice(0, 7);
+    const MONTHLY = monthKeys.map((key) => {
+      const rows = daily.filter((r) => r.d.startsWith(key));
+      const start = rows[0].d;
+      const end = rows[rows.length - 1].d;
+      const label = MONTH_LABELS[key.slice(5, 7)] + (key === todayKey ? "*" : "");
+      return { key, month: label, start, end, ...aggregateExact(daily, start, end) };
+    });
+    const TOTAL = aggregateExact(daily, FIRST_DATE, LAST_DATE);
+    return { FIRST_DATE, LAST_DATE, MONTHLY, TOTAL };
+  }, [daily]);
+
+  const data = useMemo(() => {
+    const agg = aggregateExact(daily, range.start, range.end);
+    let label;
+    if (range.start === FIRST_DATE && range.end === LAST_DATE) label = "Acumulado";
+    else label = `${fmtDate(range.start)} \u2013 ${fmtDate(range.end)}`;
+    return { month: label, ...agg };
+  }, [daily, range, FIRST_DATE, LAST_DATE]);
+
+  const handleStartChange = (e) => {
+    const start = e.target.value;
+    setRangeTouched(true);
+    setRange((r) => ({ start, end: start > r.end ? start : r.end }));
+  };
+  const handleEndChange = (e) => {
+    const end = e.target.value;
+    setRangeTouched(true);
+    setRange((r) => ({ end, start: end < r.start ? end : r.start }));
+  };
+
+  const isFullRange = range.start === FIRST_DATE && range.end === LAST_DATE;
+
+  const funnelValues = {
+    agendas: data.agendas,
+    citas: data.citas,
+    asistencias: data.asistencias,
+    cierres: data.cierres,
+  };
+  const funnelMax = data.agendas || 1;
+
+  return (
+    <div style={styles.page}>
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@500;600&display=swap');
+        * { box-sizing: border-box; }
+        .odv-card { transition: transform .18s ease, box-shadow .18s ease; }
+        .odv-card:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(11,31,29,0.10); }
+        .odv-pill { transition: background .15s ease, color .15s ease; }
+        .odv-fade { animation: odvFade .5s ease both; }
+        @keyframes odvFade { from { opacity: 0; transform: translateY(6px);} to { opacity:1; transform:none; } }
+        .odv-date { transition: border-color .15s ease; }
+        .odv-date:focus { outline: none; border-color: #0E7C7B; }
+        .odv-refresh { transition: opacity .15s ease; cursor: pointer; }
+        .odv-refresh:hover { opacity: 0.7; }
+        @keyframes odvSpin { to { transform: rotate(360deg); } }
+        .odv-spin { display: inline-block; animation: odvSpin 1s linear infinite; }
+      `}</style>
+
+      <header style={styles.header} className="odv-fade">
+        <div>
+          <div style={styles.eyebrow}>PANEL DE RESULTADOS · META ADS × VENTAS</div>
+          <h1 style={styles.h1}>Clínica Odontovida</h1>
+          <div style={styles.subtitle}>Funnel completo: inversión publicitaria → agenda → cierre → facturación</div>
+        </div>
+
+        <div style={styles.controlsCol}>
+          <div style={styles.statusRow}>
+            {status === "loading" && (
+              <span style={styles.statusBadge}><span className="odv-spin">↻</span> Conectando con Sheets…</span>
+            )}
+            {status === "live" && (
+              <span style={{ ...styles.statusBadge, color: "#0E7C7B" }}>● En vivo · sync {timeAgo(lastSync)}</span>
+            )}
+            {status === "cached-error" && (
+              <span style={{ ...styles.statusBadge, color: "#B54A3F" }} title={errorMsg || ""}>
+                ● Datos guardados (sin conexión en vivo)
+              </span>
+            )}
+            {status === "cached-initial" && (
+              <span style={{ ...styles.statusBadge, color: "#8AA19E" }}>● Datos guardados</span>
+            )}
+            <span className="odv-refresh" style={styles.refreshBtn} onClick={fetchLive} title="Actualizar ahora">
+              ↻ Actualizar
+            </span>
+          </div>
+          <div style={styles.dateRow}>
+            <span style={styles.dateLabel}>Desde</span>
+            <input
+              type="date"
+              className="odv-date"
+              style={styles.dateInput}
+              min={FIRST_DATE}
+              max={LAST_DATE}
+              value={range.start}
+              onChange={handleStartChange}
+              aria-label="Fecha de inicio"
+            />
+            <span style={styles.dateLabel}>Hasta</span>
+            <input
+              type="date"
+              className="odv-date"
+              style={styles.dateInput}
+              min={FIRST_DATE}
+              max={LAST_DATE}
+              value={range.end}
+              onChange={handleEndChange}
+              aria-label="Fecha de fin"
+            />
+          </div>
+          <div style={styles.pillRow}>
+            <button
+              className="odv-pill"
+              style={isFullRange ? styles.pillActive : styles.pill}
+              onClick={() => {
+                setRangeTouched(false);
+                setRange({ start: FIRST_DATE, end: LAST_DATE });
+              }}
+            >
+              Acumulado
+            </button>
+            {MONTHLY.map((m) => (
+              <button
+                key={m.key}
+                className="odv-pill"
+                style={range.start === m.start && range.end === m.end ? styles.pillActive : styles.pill}
+                onClick={() => {
+                  setRangeTouched(true);
+                  setRange({ start: m.start, end: m.end });
+                }}
+              >
+                {m.month}
+              </button>
+            ))}
+          </div>
+        </div>
+      </header>
+
+      <section style={styles.kpiRow} className="odv-fade">
+        <KpiCard label="Inversión Meta Ads" value={clp(data.inversion)} accent="teal" />
+        <KpiCard label="Ventas cerradas" value={clp(data.ventas)} accent="mint" />
+        <KpiCard label="Recolección real" value={clp(data.recoleccion)} accent="mint" sub={pct(data.recoleccion, data.ventas) + " cobrado"} />
+        <KpiCard label="Cierres" value={data.cierres} accent="teal" sub={pct(data.cierres, data.asistencias) + " close rate"} />
+        <KpiCard
+          label="ROAS efectivo"
+          value={data.roas !== null ? data.roas.toFixed(1) + "×" : "—"}
+          accent={data.roas !== null ? "coral" : "muted"}
+          sub={data.cac !== null ? "CAC " + clp(data.cac) : "sin inversión en el periodo"}
+        />
+      </section>
+
+      <section style={styles.grid}>
+        <div style={styles.panel} className="odv-fade">
+          <div style={styles.panelTitle}>Funnel — {data.month}</div>
+          <div style={styles.funnelWrap}>
+            {FUNNEL_STAGES.map((s, i) => {
+              const val = funnelValues[s.key];
+              const width = Math.max(8, (val / funnelMax) * 100);
+              const prevVal = i === 0 ? val : funnelValues[FUNNEL_STAGES[i - 1].key];
+              const dropPct = prevVal ? (100 - (val / prevVal) * 100).toFixed(0) : 0;
+              return (
+                <div key={s.key} style={styles.funnelRow}>
+                  <div style={styles.funnelLabelCol}>
+                    <div style={styles.funnelLabel}>{s.label}</div>
+                    {i > 0 && <div style={styles.funnelDrop}>− {dropPct}%</div>}
+                  </div>
+                  <div style={styles.funnelTrack}>
+                    <div style={{ ...styles.funnelBar, width: width + "%" }}>
+                      <span style={styles.funnelValue}>{val}</span>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          <div style={styles.footnote}>* Cifras exactas por día (no prorrateadas).</div>
+        </div>
+
+        <div style={styles.panel} className="odv-fade">
+          <div style={styles.panelTitle}>Inversión vs. Ventas por mes</div>
+          <ResponsiveContainer width="100%" height={280}>
+            <AreaChart data={MONTHLY} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+              <defs>
+                <linearGradient id="ventasGrad" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#0E7C7B" stopOpacity={0.35} />
+                  <stop offset="100%" stopColor="#0E7C7B" stopOpacity={0} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="2 4" stroke="#E1E8E6" vertical={false} />
+              <XAxis dataKey="month" tick={{ fontFamily: "Inter", fontSize: 12, fill: "#5B6E6B" }} axisLine={{ stroke: "#DCE4E2" }} tickLine={false} />
+              <YAxis
+                tickFormatter={(v) => (v / 1000000).toFixed(1) + "M"}
+                tick={{ fontFamily: "IBM Plex Mono", fontSize: 11, fill: "#5B6E6B" }}
+                axisLine={false}
+                tickLine={false}
+                width={48}
+              />
+              <Tooltip
+                formatter={(v, name) => [clp(v), name]}
+                contentStyle={{ fontFamily: "Inter", fontSize: 13, borderRadius: 10, border: "1px solid #DCE4E2" }}
+              />
+              <Legend wrapperStyle={{ fontFamily: "Inter", fontSize: 12 }} />
+              <Area type="monotone" dataKey="ventas" name="Ventas" stroke="#0E7C7B" fill="url(#ventasGrad)" strokeWidth={2.5} />
+              <Line type="monotone" dataKey="inversion" name="Inversión Meta" stroke="#B54A3F" strokeWidth={2.5} dot={{ r: 3 }} />
+            </AreaChart>
+          </ResponsiveContainer>
+        </div>
+      </section>
+
+      <section style={styles.panel} className="odv-fade">
+        <div style={styles.panelTitle}>Detalle mensual completo</div>
+        <div style={styles.tableWrap}>
+          <table style={styles.table}>
+            <thead>
+              <tr>
+                {[
+                  "Mes", "Inversión", "CPM", "Clicks", "CTR", "CMI", "LP%", "CPCMI",
+                  "Agendas", "SCR-%", "Citas", "Asistencias", "Asis %", "ASIS-$",
+                  "Unidades", "CC%", "Ventas", "Facturado", "CPA", "C-ROI",
+                ].map((h) => (
+                  <th key={h} style={styles.th}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {MONTHLY.map((m) => (
+                <tr key={m.month} style={m.start <= range.end && m.end >= range.start ? styles.trActive : undefined}>
+                  <td style={styles.tdLabel}>{m.month}</td>
+                  <td style={styles.td}>{money2(m.inversion)}</td>
+                  <td style={styles.td}>{money2(m.cpm)}</td>
+                  <td style={styles.td}>{num2(m.clicks)}</td>
+                  <td style={styles.td}>{rate2(m.ctr)}</td>
+                  <td style={styles.td}>{num2(m.cmi)}</td>
+                  <td style={styles.td}>{rate2(m.cmiLP)}</td>
+                  <td style={styles.td}>{money2(m.cpcmi)}</td>
+                  <td style={styles.td}>{num2(m.agendas)}</td>
+                  <td style={styles.td}>{rate2(m.scr)}</td>
+                  <td style={styles.td}>{num2(m.citas)}</td>
+                  <td style={styles.td}>{num2(m.asistencias)}</td>
+                  <td style={styles.td}>{rate2(m.asisPct)}</td>
+                  <td style={styles.td}>{money2(m.asisCost)}</td>
+                  <td style={styles.td}>{num2(m.cierres)}</td>
+                  <td style={styles.td}>{rate2(m.ccPct)}</td>
+                  <td style={styles.td}>{money2(m.ventas)}</td>
+                  <td style={styles.td}>{money2(m.recoleccion)}</td>
+                  <td style={styles.td}>{money2(m.cpa)}</td>
+                  <td style={styles.td}>{mult2(m.croi)}</td>
+                </tr>
+              ))}
+              <tr style={styles.trTotal}>
+                <td style={styles.tdLabel}>Total</td>
+                <td style={styles.td}>{money2(TOTAL.inversion)}</td>
+                <td style={styles.td}>{money2(TOTAL.cpm)}</td>
+                <td style={styles.td}>{num2(TOTAL.clicks)}</td>
+                <td style={styles.td}>{rate2(TOTAL.ctr)}</td>
+                <td style={styles.td}>{num2(TOTAL.cmi)}</td>
+                <td style={styles.td}>{rate2(TOTAL.cmiLP)}</td>
+                <td style={styles.td}>{money2(TOTAL.cpcmi)}</td>
+                <td style={styles.td}>{num2(TOTAL.agendas)}</td>
+                <td style={styles.td}>{rate2(TOTAL.scr)}</td>
+                <td style={styles.td}>{num2(TOTAL.citas)}</td>
+                <td style={styles.td}>{num2(TOTAL.asistencias)}</td>
+                <td style={styles.td}>{rate2(TOTAL.asisPct)}</td>
+                <td style={styles.td}>{money2(TOTAL.asisCost)}</td>
+                <td style={styles.td}>{num2(TOTAL.cierres)}</td>
+                <td style={styles.td}>{rate2(TOTAL.ccPct)}</td>
+                <td style={styles.td}>{money2(TOTAL.ventas)}</td>
+                <td style={styles.td}>{money2(TOTAL.recoleccion)}</td>
+                <td style={styles.td}>{money2(TOTAL.cpa)}</td>
+                <td style={styles.td}>{mult2(TOTAL.croi)}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div style={styles.footnote}>
+          * Enero fue 100% orgánico (WhatsApp), por eso CPM/CTR/LP%/C-ROI no aplican ese mes.
+        </div>
+      </section>
+
+      <footer style={styles.footer}>
+        {status === "live"
+          ? "Conectado en vivo a tu Google Sheets (cuenta de servicio de Google). Se refresca al abrir la página y con el botón \u201cActualizar\u201d."
+          : "Mostrando datos guardados porque no se pudo conectar en vivo con el Sheets. Usa \u201cActualizar\u201d para reintentar."}
+      </footer>
+    </div>
+  );
+}
+
+function KpiCard({ label, value, sub, accent }) {
+  const accentColor = { teal: "#0E7C7B", mint: "#3FA796", coral: "#B54A3F", muted: "#8AA19E" }[accent] || "#0E7C7B";
+  return (
+    <div className="odv-card" style={styles.kpiCard}>
+      <div style={{ ...styles.kpiBar, background: accentColor }} />
+      <div style={styles.kpiLabel}>{label}</div>
+      <div style={styles.kpiValue}>{value}</div>
+      {sub && <div style={{ ...styles.kpiSub, color: accentColor }}>{sub}</div>}
+    </div>
+  );
+}
+
+const styles = {
+  page: { fontFamily: "'Inter', sans-serif", background: "#F5F7F6", color: "#12201F", padding: "32px clamp(16px, 4vw, 48px)", minHeight: "100%" },
+  header: { display: "flex", flexWrap: "wrap", justifyContent: "space-between", alignItems: "flex-end", gap: 20, marginBottom: 28, borderBottom: "1px solid #DCE4E2", paddingBottom: 20 },
+  eyebrow: { fontFamily: "'IBM Plex Mono', monospace", fontSize: 11, letterSpacing: "0.08em", color: "#0E7C7B", marginBottom: 6 },
+  h1: { fontFamily: "'Space Grotesk', sans-serif", fontSize: "clamp(26px, 4vw, 36px)", fontWeight: 700, margin: 0, color: "#0B1F1D" },
+  subtitle: { fontSize: 14, color: "#5B6E6B", marginTop: 6 },
+  controlsCol: { display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 10 },
+  statusRow: { display: "flex", alignItems: "center", gap: 14 },
+  statusBadge: { fontFamily: "'IBM Plex Mono', monospace", fontSize: 11.5 },
+  refreshBtn: { fontFamily: "'IBM Plex Mono', monospace", fontSize: 11.5, color: "#0E7C7B", fontWeight: 600 },
+  dateRow: { display: "flex", alignItems: "center", gap: 8 },
+  dateLabel: { fontFamily: "'IBM Plex Mono', monospace", fontSize: 11, letterSpacing: "0.06em", color: "#5B6E6B", textTransform: "uppercase" },
+  dateInput: { fontFamily: "'IBM Plex Mono', monospace", fontSize: 12.5, padding: "7px 10px", borderRadius: 8, border: "1px solid #DCE4E2", background: "#fff", color: "#12201F", colorScheme: "light" },
+  pillRow: { display: "flex", flexWrap: "wrap", gap: 8, justifyContent: "flex-end" },
+  pill: { fontFamily: "'IBM Plex Mono', monospace", fontSize: 12, padding: "8px 14px", borderRadius: 999, border: "1px solid #DCE4E2", background: "#fff", color: "#5B6E6B", cursor: "pointer" },
+  pillActive: { fontFamily: "'IBM Plex Mono', monospace", fontSize: 12, padding: "8px 14px", borderRadius: 999, border: "1px solid #0E7C7B", background: "#0E7C7B", color: "#fff", cursor: "pointer" },
+  kpiRow: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 16, marginBottom: 24 },
+  kpiCard: { position: "relative", background: "#fff", border: "1px solid #E1E8E6", borderRadius: 14, padding: "18px 18px 16px", overflow: "hidden" },
+  kpiBar: { position: "absolute", top: 0, left: 0, right: 0, height: 3 },
+  kpiLabel: { fontSize: 12.5, color: "#5B6E6B", marginBottom: 8 },
+  kpiValue: { fontFamily: "'IBM Plex Mono', monospace", fontSize: 22, fontWeight: 600, color: "#0B1F1D" },
+  kpiSub: { fontSize: 12, marginTop: 6, fontWeight: 500 },
+  grid: { display: "grid", gridTemplateColumns: "minmax(280px, 1fr) minmax(320px, 1.3fr)", gap: 16, marginBottom: 16 },
+  panel: { background: "#fff", border: "1px solid #E1E8E6", borderRadius: 14, padding: "20px 22px", marginBottom: 16 },
+  panelTitle: { fontFamily: "'Space Grotesk', sans-serif", fontSize: 15, fontWeight: 600, color: "#0B1F1D", marginBottom: 16 },
+  funnelWrap: { display: "flex", flexDirection: "column", gap: 14 },
+  funnelRow: { display: "flex", alignItems: "center", gap: 12 },
+  funnelLabelCol: { width: 128, flexShrink: 0 },
+  funnelLabel: { fontSize: 12.5, color: "#12201F", fontWeight: 500 },
+  funnelDrop: { fontFamily: "'IBM Plex Mono', monospace", fontSize: 10.5, color: "#B54A3F", marginTop: 2 },
+  funnelTrack: { flex: 1, background: "#EEF3F2", borderRadius: 8, height: 34, position: "relative" },
+  funnelBar: { height: "100%", background: "linear-gradient(90deg, #0E7C7B, #3FA796)", borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "flex-end", paddingRight: 10, minWidth: 34, transition: "width .4s ease" },
+  funnelValue: { fontFamily: "'IBM Plex Mono', monospace", fontSize: 12.5, color: "#fff", fontWeight: 600 },
+  footnote: { fontSize: 11.5, color: "#8AA19E", marginTop: 14 },
+  tableWrap: { overflowX: "auto" },
+  table: { width: "100%", borderCollapse: "collapse", fontSize: 13 },
+  th: { textAlign: "left", fontFamily: "'IBM Plex Mono', monospace", fontSize: 11, letterSpacing: "0.03em", color: "#5B6E6B", borderBottom: "1px solid #DCE4E2", padding: "8px 10px", whiteSpace: "nowrap" },
+  td: { padding: "9px 10px", borderBottom: "1px solid #EEF3F2", fontFamily: "'IBM Plex Mono', monospace", fontSize: 12.5, whiteSpace: "nowrap" },
+  tdLabel: { padding: "9px 10px", borderBottom: "1px solid #EEF3F2", fontWeight: 600, whiteSpace: "nowrap" },
+  trActive: { background: "#F0F7F6" },
+  trTotal: { background: "#FBFAF7", fontWeight: 700 },
+  footer: { fontSize: 11.5, color: "#8AA19E", marginTop: 8, lineHeight: 1.5 },
+};
+
+ReactDOM.createRoot(document.getElementById("root")).render(React.createElement(Dashboard));
+
+
+</script>
+<script>
+  (function () {
+    var src = document.getElementById('app-source').textContent;
+    var out = Babel.transform(src, { presets: [['react', { runtime: 'classic' }]] });
+    (0, eval)(out.code);
+  })();
+</script>
+</body>
