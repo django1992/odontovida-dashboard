@@ -314,6 +314,7 @@ function pctColor(pctValue, thresholds) {
 
 function Dashboard() {
   const [daily, setDaily] = useState(FALLBACK_DAILY);
+  const [ultimaAgenda, setUltimaAgenda] = useState(null);
   const [status, setStatus] = useState("cached-initial"); // loading | live | cached-error | cached-initial
   const [lastSync, setLastSync] = useState(null);
   const [errorMsg, setErrorMsg] = useState(null);
@@ -336,6 +337,7 @@ function Dashboard() {
       .then((json) => {
         if (json.ok && json.daily && json.daily.length) {
           setDaily(json.daily);
+          setUltimaAgenda(json.ultimaAgenda || null);
           setStatus("live");
           setLastSync(json.syncedAt);
           setErrorMsg(null);
@@ -540,6 +542,7 @@ function Dashboard() {
           accent="teal"
           sub={fmtShort(yesterdayISO)}
         />
+        <AgendaCard ultimaAgenda={ultimaAgenda} fmtShort={fmtShort} />
         <KpiCard
           label="Citas día actual"
           value={todayRow ? todayRow.ci : "—"}
@@ -711,6 +714,25 @@ function KpiCard({ label, value, sub, accent }) {
   );
 }
 
+function AgendaCard({ ultimaAgenda, fmtShort }) {
+  const accentColor = "#0E7C7B";
+  return (
+    <div className="odv-card" style={styles.kpiCard}>
+      <div style={{ ...styles.kpiBar, background: accentColor }} />
+      <div style={styles.kpiLabel}>Última agenda</div>
+      <div style={styles.agendaName}>{ultimaAgenda ? ultimaAgenda.nombre : "—"}</div>
+      <div style={styles.agendaDates}>
+        <span>
+          Agenda: <b>{ultimaAgenda && ultimaAgenda.agenda ? fmtShort(ultimaAgenda.agenda) : "—"}</b>
+        </span>
+        <span>
+          Cita: <b>{ultimaAgenda && ultimaAgenda.cita ? fmtShort(ultimaAgenda.cita) : "—"}</b>
+        </span>
+      </div>
+    </div>
+  );
+}
+
 const styles = {
   page: { fontFamily: "'Inter', sans-serif", background: "#F5F7F6", color: "#12201F", padding: "32px clamp(16px, 4vw, 48px)", minHeight: "100%" },
   header: { display: "flex", flexWrap: "wrap", justifyContent: "space-between", alignItems: "flex-end", gap: 20, marginBottom: 28, borderBottom: "1px solid #DCE4E2", paddingBottom: 20 },
@@ -734,6 +756,8 @@ const styles = {
   kpiLabel: { fontSize: 12.5, color: "#5B6E6B", marginBottom: 8 },
   kpiValue: { fontFamily: "'IBM Plex Mono', monospace", fontSize: 22, fontWeight: 600, color: "#0B1F1D" },
   kpiSub: { fontSize: 12, marginTop: 6, fontWeight: 500 },
+  agendaName: { fontFamily: "'Space Grotesk', sans-serif", fontSize: 17, fontWeight: 600, color: "#0B1F1D", lineHeight: 1.2, marginTop: 2 },
+  agendaDates: { display: "flex", flexDirection: "column", gap: 2, marginTop: 8, fontSize: 12, color: "#5B6E6B" },
   grid: { display: "grid", gridTemplateColumns: "minmax(280px, 1fr) minmax(320px, 1.3fr)", gap: 16, marginBottom: 16 },
   panel: { background: "#fff", border: "1px solid #E1E8E6", borderRadius: 14, padding: "20px 22px", marginBottom: 16 },
   panelTitle: { fontFamily: "'Space Grotesk', sans-serif", fontSize: 15, fontWeight: 600, color: "#0B1F1D", marginBottom: 16 },
