@@ -392,6 +392,28 @@ function Dashboard() {
 
   const isFullRange = range.start === FIRST_DATE && range.end === LAST_DATE;
 
+  // ---- Tarjetas de "día anterior / día actual" (independientes del selector de fechas) ----
+  // Se anclan a la fecha REAL del navegador (hora local), no al rango elegido.
+  const localISO = (dt) => {
+    const off = dt.getTimezoneOffset() * 60000;
+    return new Date(dt.getTime() - off).toISOString().slice(0, 10);
+  };
+  const todayISO = localISO(new Date());
+  const yObj = new Date();
+  yObj.setDate(yObj.getDate() - 1);
+  const yesterdayISO = localISO(yObj);
+  const dayMap = useMemo(() => {
+    const m = {};
+    daily.forEach((d) => { m[d.d] = d; });
+    return m;
+  }, [daily]);
+  const todayRow = dayMap[todayISO] || null;
+  const yesterdayRow = dayMap[yesterdayISO] || null;
+  const fmtShort = (iso) => {
+    const [y, m, d] = iso.split("-");
+    return `${d}/${m}`;
+  };
+
   const funnelValues = {
     cmi: data.cmi,
     agendas: data.agendas,
@@ -508,6 +530,33 @@ function Dashboard() {
           value={data.roas !== null ? data.roas.toFixed(1) + "×" : "—"}
           accent={data.roas !== null ? "coral" : "muted"}
           sub={data.cac !== null ? "CAC " + clp(data.cac) : "sin inversión en el periodo"}
+        />
+      </section>
+
+      <section style={styles.kpiRowDay} className="odv-fade">
+        <KpiCard
+          label="Agendas día anterior"
+          value={yesterdayRow ? yesterdayRow.ag : "—"}
+          accent="teal"
+          sub={fmtShort(yesterdayISO)}
+        />
+        <KpiCard
+          label="Citas día actual"
+          value={todayRow ? todayRow.ci : "—"}
+          accent="mint"
+          sub={fmtShort(todayISO)}
+        />
+        <KpiCard
+          label="Asistencias día anterior"
+          value={yesterdayRow ? yesterdayRow.asi : "—"}
+          accent="mint"
+          sub={fmtShort(yesterdayISO)}
+        />
+        <KpiCard
+          label="Cierres día anterior"
+          value={yesterdayRow ? yesterdayRow.cie : "—"}
+          accent="teal"
+          sub={fmtShort(yesterdayISO)}
         />
       </section>
 
@@ -679,6 +728,7 @@ const styles = {
   pill: { fontFamily: "'IBM Plex Mono', monospace", fontSize: 12, padding: "8px 14px", borderRadius: 999, border: "1px solid #DCE4E2", background: "#fff", color: "#5B6E6B", cursor: "pointer" },
   pillActive: { fontFamily: "'IBM Plex Mono', monospace", fontSize: 12, padding: "8px 14px", borderRadius: 999, border: "1px solid #0E7C7B", background: "#0E7C7B", color: "#fff", cursor: "pointer" },
   kpiRow: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 16, marginBottom: 24 },
+  kpiRowDay: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 16, marginBottom: 24 },
   kpiCard: { position: "relative", background: "#fff", border: "1px solid #E1E8E6", borderRadius: 14, padding: "18px 18px 16px", overflow: "hidden" },
   kpiBar: { position: "absolute", top: 0, left: 0, right: 0, height: 3 },
   kpiLabel: { fontSize: 12.5, color: "#5B6E6B", marginBottom: 8 },
