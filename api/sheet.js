@@ -220,6 +220,51 @@ function parseDaily(rows) {
   return out;
 }
 
+// Nombre exacto de la pestaña con el registro fila-por-fila de pacientes.
+const REGISTRY_TAB = "Registro de pacientes";
+
+// Encuentra la agenda MÁS RECIENTE (mayor fecha en la columna "Agenda") en el registro de pacientes,
+// y devuelve { nombre, agenda, cita } de esa fila. Columnas: G=Nombre y apellido, E=Agenda, F=Cita.
+function parseUltimaAgenda(rows) {
+  // 1) Ubicar la fila de encabezados (la que tiene "Nombre y apellido", "Agenda" y "Cita").
+  let cols = {};
+  let headerIdx = -1;
+  for (let r = 0; r < Math.min(rows.length, 15); r++) {
+    const row = rows[r] || [];
+    const texts = row.map((c) => norm(c));
+    const hasNombre = texts.some((t) => t === norm("Nombre y apellido"));
+    const hasAgenda = texts.some((t) => t === norm("Agenda"));
+    const hasCita = texts.some((t) => t === norm("Cita"));
+    if (hasNombre && hasAgenda && hasCita) {
+      headerIdx = r;
+      row.forEach((cell, idx) => {
+        const t = norm(cell);
+        if (t === norm("Nombre y apellido") && cols.nombre === undefined) cols.nombre = idx;
+        if (t === norm("Agenda") && cols.agenda === undefined) cols.agenda = idx;
+        if (t === norm("Cita") && cols.cita === undefined) cols.cita = idx;
+      });
+      break;
+    }
+  }
+  if (headerIdx === -1 || cols.nombre === undefined || cols.agenda === undefined) return null;
+
+  // 2) Recorrer las filas de datos y quedarnos con la de mayor fecha de agenda (con nombre válido).
+  let best = null;
+  for (let r = headerIdx + 1; r < rows.length; r++) {
+    const row = rows[r] || [];
+    const agendaISO = isoFromCell(row[cols.agenda]);
+    if (!agendaISO) continue;
+    const nombre = String(row[cols.nombre] == null ? "" : row[cols.nombre]).trim();
+    if (!nombre) continue;
+    const citaISO = cols.cita !== undefined ? isoFromCell(row[cols.cita]) : null;
+    // >= para que, ante empates de fecha, gane la fila más abajo (la ingresada más recientemente).
+    if (!best || agendaISO >= best.agenda) {
+      best = { nombre, agenda: agendaISO, cita: citaISO };
+    }
+  }
+  return best;
+}
+
 module.exports = async (req, res) => {
   res.setHeader("Cache-Control", "s-maxage=300, stale-while-revalidate=60");
   try {
@@ -232,8 +277,10 @@ module.exports = async (req, res) => {
 
     let daily = [];
     const debugInfo = [];
+    let registryRows = null;
     for (const title of titles) {
       const rows = await fetchSheetValues(accessToken, sheetId, title);
+      if (title === REGISTRY_TAB) registryRows = rows;
       const found = parseDaily(rows);
       debugInfo.push({ pestaña: title, filas_leidas: rows.length, dias_encontrados: found.length });
       daily = daily.concat(found);
@@ -249,7 +296,16 @@ module.exports = async (req, res) => {
           JSON.stringify(debugInfo)
       );
     }
-    res.status(200).json({ ok: true, daily, syncedAt: new Date().toISOString(), debug: debugInfo });
+
+    // La última agenda es opcional: si algo falla al leer el registro, no rompemos el dashboard.
+    let ultimaAgenda = null;
+    try {
+      if (registryRows) ultimaAgenda = parseUltimaAgenda(registryRows);
+    } catch (e) {
+      ultimaAgenda = null;
+    }
+
+    res.status(200).json({ ok: true, daily, ultimaAgenda, syncedAt: new Date().toISOString(), debug: debugInfo });
   } catch (err) {
     res.status(500).json({ ok: false, error: String(err && err.message ? err.message : err) });
   }
