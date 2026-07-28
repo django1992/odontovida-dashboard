@@ -319,6 +319,8 @@ function Dashboard() {
   const [lastSync, setLastSync] = useState(null);
   const [errorMsg, setErrorMsg] = useState(null);
   const [rangeTouched, setRangeTouched] = useState(false);
+  const [clients, setClients] = useState([]);
+  const [clientKey, setClientKey] = useState(null);
 
   const dailyBounds = useMemo(
     () => ({ first: daily[0].d, last: daily[daily.length - 1].d }),
@@ -330,9 +332,10 @@ function Dashboard() {
     if (!rangeTouched) setRange({ start: dailyBounds.first, end: dailyBounds.last });
   }, [dailyBounds, rangeTouched]);
 
-  const fetchLive = () => {
+  const fetchLive = (key) => {
     setStatus("loading");
-    fetch("/api/sheet?t=" + Date.now())
+    const clientParam = key ? "&client=" + encodeURIComponent(key) : "";
+    fetch("/api/sheet?t=" + Date.now() + clientParam)
       .then((r) => r.json())
       .then((json) => {
         if (json.ok && json.daily && json.daily.length) {
@@ -341,6 +344,7 @@ function Dashboard() {
           setStatus("live");
           setLastSync(json.syncedAt);
           setErrorMsg(null);
+          if (json.client && json.client.key) setClientKey(json.client.key);
         } else {
           setStatus("cached-error");
           setErrorMsg(json.error || "Respuesta inválida del servidor");
@@ -352,10 +356,34 @@ function Dashboard() {
       });
   };
 
+  // Al montar: cargar la lista de clientes y luego los datos del primero.
   useEffect(() => {
-    fetchLive();
+    fetch("/api/sheet?list=1&t=" + Date.now())
+      .then((r) => r.json())
+      .then((json) => {
+        if (json.ok && json.clients && json.clients.length) {
+          setClients(json.clients);
+          const first = json.clients[0].key;
+          setClientKey(first);
+          fetchLive(first);
+        } else {
+          fetchLive();
+        }
+      })
+      .catch(() => fetchLive());
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const handleClientChange = (e) => {
+    const key = e.target.value;
+    setClientKey(key);
+    setRangeTouched(false);
+    fetchLive(key);
+  };
+
+  const currentClientName = clientKey
+    ? ((clients.find((c) => c.key === clientKey) || {}).name || clientKey)
+    : "Clínica Odontovida";
 
   const { FIRST_DATE, LAST_DATE, MONTHLY, TOTAL } = useMemo(() => {
     const FIRST_DATE = daily[0].d;
@@ -446,7 +474,21 @@ function Dashboard() {
       <header style={styles.header} className="odv-fade">
         <div>
           <div style={styles.eyebrow}>PANEL DE RESULTADOS · META ADS × VENTAS</div>
-          <h1 style={styles.h1}>Clínica Odontovida</h1>
+          <div style={styles.titleRow}>
+            <h1 style={styles.h1}>{currentClientName}</h1>
+            {clients.length > 1 && (
+              <select
+                style={styles.clientSelect}
+                value={clientKey || ""}
+                onChange={handleClientChange}
+                aria-label="Seleccionar cliente"
+              >
+                {clients.map((c) => (
+                  <option key={c.key} value={c.key}>{c.name}</option>
+                ))}
+              </select>
+            )}
+          </div>
           <div style={styles.subtitle}>Funnel completo: inversión publicitaria → agenda → cierre → facturación</div>
         </div>
 
@@ -466,7 +508,7 @@ function Dashboard() {
             {status === "cached-initial" && (
               <span style={{ ...styles.statusBadge, color: "#8AA19E" }}>● Datos guardados</span>
             )}
-            <span className="odv-refresh" style={styles.refreshBtn} onClick={fetchLive} title="Actualizar ahora">
+            <span className="odv-refresh" style={styles.refreshBtn} onClick={() => fetchLive(clientKey)} title="Actualizar ahora">
               ↻ Actualizar
             </span>
           </div>
@@ -738,6 +780,8 @@ const styles = {
   header: { display: "flex", flexWrap: "wrap", justifyContent: "space-between", alignItems: "flex-end", gap: 20, marginBottom: 28, borderBottom: "1px solid #DCE4E2", paddingBottom: 20 },
   eyebrow: { fontFamily: "'IBM Plex Mono', monospace", fontSize: 11, letterSpacing: "0.08em", color: "#0E7C7B", marginBottom: 6 },
   h1: { fontFamily: "'Space Grotesk', sans-serif", fontSize: "clamp(26px, 4vw, 36px)", fontWeight: 700, margin: 0, color: "#0B1F1D" },
+  titleRow: { display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" },
+  clientSelect: { fontFamily: "'IBM Plex Mono', monospace", fontSize: 13, padding: "7px 12px", borderRadius: 8, border: "1px solid #DCE4E2", background: "#fff", color: "#0E7C7B", fontWeight: 600, cursor: "pointer", colorScheme: "light" },
   subtitle: { fontSize: 14, color: "#5B6E6B", marginTop: 6 },
   controlsCol: { display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 10 },
   statusRow: { display: "flex", alignItems: "center", gap: 14 },
