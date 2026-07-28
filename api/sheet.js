@@ -68,16 +68,29 @@ async function getAccessToken() {
   return json.access_token;
 }
 
-// Lee el rango completo de la primera hoja como valores SIN formatear (números crudos, no "$25.870").
-async function fetchSheetValues(accessToken, sheetId) {
-  const range = "A1:AZ2000";
+// Lista los nombres (títulos) de todas las pestañas del spreadsheet.
+async function fetchSheetTitles(accessToken, sheetId) {
+  const url = `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}?fields=sheets.properties.title`;
+  const res = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } });
+  const json = await res.json();
+  if (!res.ok) {
+    throw new Error("Error listando las pestañas del Sheets: " + JSON.stringify(json));
+  }
+  return (json.sheets || []).map((s) => s.properties.title);
+}
+
+// Lee el rango completo de UNA pestaña (por nombre) como valores SIN formatear
+// (números crudos, no "$25.870").
+async function fetchSheetValues(accessToken, sheetId, sheetTitle) {
+  const escapedTitle = sheetTitle.replace(/'/g, "''");
+  const range = `'${escapedTitle}'!A1:AZ2000`;
   const url = `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${encodeURIComponent(
     range
   )}?valueRenderOption=UNFORMATTED_VALUE`;
   const res = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } });
   const json = await res.json();
   if (!res.ok) {
-    throw new Error("Error leyendo el Sheets: " + JSON.stringify(json));
+    throw new Error(`Error leyendo la pestaña "${sheetTitle}": ` + JSON.stringify(json));
   }
   return json.values || [];
 }
@@ -108,6 +121,20 @@ const HEADER_TO_KEY = {
 };
 const DATE_RE = /^(\d{1,2})\/(\d{1,2})\/(\d{2})$/;
 
+function norm(s) {
+  return String(s == null ? "" : s)
+    .replace(/\u00a0/g, " ") // espacios "non-breaking"
+    .trim()
+    .toLowerCase();
+}
+
+// Marcador que identifica una fila de encabezado de tabla diaria. Se acepta con o sin
+// guion/espacio ("scr-%", "scr %", "scr%") para tolerar pequeñas variaciones de formato.
+function looksLikeScrHeader(cellText) {
+  const t = norm(cellText).replace(/[\s-]/g, "");
+  return t === "scr%";
+}
+
 function toNum(v) {
   if (v === undefined || v === null || v === "") return 0;
   if (typeof v === "number") return v;
@@ -122,24 +149,27 @@ function isoFromDDMMYY(s) {
   return `20${yy}-${mm.padStart(2, "0")}-${dd.padStart(2, "0")}`;
 }
 
-// Parsea las tablas diarias apiladas dentro de la hoja: busca filas de encabezado
-// (identificadas por contener "SCR-%"), mapea columnas por texto de encabezado,
-// y luego lee filas siguientes mientras alguna columna tenga una fecha DD/MM/YY válida.
+// Parsea las tablas diarias apiladas dentro de una pestaña: busca filas de encabezado
+// (identificadas por una celda tipo "SCR-%"), mapea columnas por texto de encabezado
+// (comparación flexible: sin tildes/mayúsculas no hace falta, se compara tal cual pero
+// tolerando espacios raros), y luego lee filas siguientes mientras alguna columna tenga
+// una fecha DD/MM/YY válida.
 function parseDaily(rows) {
   const out = [];
   const seen = new Set();
 
   for (let r = 0; r < rows.length; r++) {
     const row = rows[r] || [];
-    const hasScr = row.some((c) => String(c).trim() === "SCR-%");
+    const hasScr = row.some((c) => looksLikeScrHeader(c));
     if (!hasScr) continue;
 
-    // Mapear columnas de este bloque por texto de encabezado.
+    // Mapear columnas de este bloque por texto de encabezado (comparación normalizada).
     const colOf = {};
     row.forEach((cell, idx) => {
-      const text = String(cell).trim();
-      if (NEEDED_HEADERS.includes(text) && colOf[text] === undefined) {
-        colOf[text] = idx;
+      const text = norm(cell);
+      const match = NEEDED_HEADERS.find((h) => norm(h) === text);
+      if (match && colOf[match] === undefined) {
+        colOf[match] = idx;
       }
     });
     if (Object.keys(colOf).length < 5) continue; // bloque no reconocido, seguir buscando
@@ -179,12 +209,30 @@ module.exports = async (req, res) => {
     const sheetId = process.env.SHEET_ID;
     if (!sheetId) throw new Error("Falta SHEET_ID en las variables de entorno.");
     const accessToken = await getAccessToken();
-    const rows = await fetchSheetValues(accessToken, sheetId);
-    const daily = parseDaily(rows);
-    if (daily.length === 0) {
-      throw new Error("Se conectó a Google Sheets pero no se reconoció ninguna tabla diaria. Revisa la estructura de la hoja.");
+
+    const titles = await fetchSheetTitles(accessToken, sheetId);
+    if (titles.length === 0) throw new Error("El Sheets no tiene ninguna pestaña visible.");
+
+    let daily = [];
+    const debugInfo = [];
+    for (const title of titles) {
+      const rows = await fetchSheetValues(accessToken, sheetId, title);
+      const found = parseDaily(rows);
+      debugInfo.push({ pestaña: title, filas_leidas: rows.length, dias_encontrados: found.length });
+      daily = daily.concat(found);
     }
-    res.status(200).json({ ok: true, daily, syncedAt: new Date().toISOString() });
+    // Por si el mismo día aparece en más de una pestaña, nos quedamos con una sola entrada por fecha.
+    const byDate = {};
+    daily.forEach((d) => { byDate[d.d] = d; });
+    daily = Object.values(byDate).sort((a, b) => (a.d < b.d ? -1 : a.d > b.d ? 1 : 0));
+
+    if (daily.length === 0) {
+      throw new Error(
+        "Se conectó a Google Sheets pero no se reconoció ninguna tabla diaria. Pestañas revisadas: " +
+          JSON.stringify(debugInfo)
+      );
+    }
+    res.status(200).json({ ok: true, daily, syncedAt: new Date().toISOString(), debug: debugInfo });
   } catch (err) {
     res.status(500).json({ ok: false, error: String(err && err.message ? err.message : err) });
   }
