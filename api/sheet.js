@@ -119,7 +119,19 @@ const HEADER_TO_KEY = {
   "Ventas": "ven",
   "Facturado": "fac",
 };
-const DATE_RE = /^(\d{1,2})\/(\d{1,2})\/(\d{2})$/;
+const DATE_RE = /^(\d{1,2})\/(\d{1,2})\/(\d{2}|\d{4})$/;
+
+// Con valueRenderOption=UNFORMATTED_VALUE, Google devuelve las fechas como número de serie
+// (días desde el 30/12/1899). Ej: 46023 = 01/01/2026. Convertimos ese número a fecha ISO.
+const SHEETS_EPOCH_MS = Date.UTC(1899, 11, 30);
+function isoFromSerial(n) {
+  if (typeof n !== "number" || !isFinite(n)) return null;
+  if (n < 43831 || n > 51500) return null; // solo fechas plausibles 2020-2041 (evita confundir montos con fechas)
+  if (n % 1 !== 0) return null; // las fechas puras son enteros; decimales son montos/porcentajes
+  const ms = SHEETS_EPOCH_MS + Math.round(n) * 86400000;
+  const d = new Date(ms);
+  return d.toISOString().slice(0, 10);
+}
 
 function norm(s) {
   return String(s == null ? "" : s)
@@ -142,11 +154,16 @@ function toNum(v) {
   return isNaN(n) ? 0 : n;
 }
 
-function isoFromDDMMYY(s) {
-  const m = DATE_RE.exec(String(s).trim());
+function isoFromCell(v) {
+  // Caso 1: número de serie de Google Sheets (lo que devuelve UNFORMATTED_VALUE para fechas).
+  const fromSerial = isoFromSerial(v);
+  if (fromSerial) return fromSerial;
+  // Caso 2: texto tipo "01/01/26" o "01/01/2026".
+  const m = DATE_RE.exec(String(v).trim());
   if (!m) return null;
-  const [, dd, mm, yy] = m;
-  return `20${yy}-${mm.padStart(2, "0")}-${dd.padStart(2, "0")}`;
+  const [, dd, mm, yRaw] = m;
+  const yyyy = yRaw.length === 2 ? `20${yRaw}` : yRaw;
+  return `${yyyy}-${mm.padStart(2, "0")}-${dd.padStart(2, "0")}`;
 }
 
 // Parsea las tablas diarias apiladas dentro de una pestaña: busca filas de encabezado
@@ -180,7 +197,7 @@ function parseDaily(rows) {
       const dataRow = rows[rr] || [];
       let iso = null;
       for (let c = 0; c < Math.min(4, dataRow.length); c++) {
-        iso = isoFromDDMMYY(dataRow[c]);
+        iso = isoFromCell(dataRow[c]);
         if (iso) break;
       }
       if (!iso) break; // fin de este bloque de días
