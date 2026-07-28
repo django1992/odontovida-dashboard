@@ -265,11 +265,64 @@ function parseUltimaAgenda(rows) {
   return best;
 }
 
+// ---- Multi-cliente ----
+// Cada cliente se define con dos variables de entorno en Vercel:
+//   SHEET_ID_<CLAVE>     -> el ID del Google Sheets de ese cliente
+//   CLIENT_NAME_<CLAVE>  -> el nombre a mostrar (opcional; si falta, se usa la clave)
+// Ej: SHEET_ID_ODONTOVIDA = 1gLQ...   CLIENT_NAME_ODONTOVIDA = Clínica Odontovida
+// Agregar un cliente nuevo = agregar esas 2 variables + Redeploy. No hay que tocar el código.
+function getClients() {
+  const clients = [];
+  const seen = new Set();
+  for (const k of Object.keys(process.env)) {
+    if (k.startsWith("SHEET_ID_") && process.env[k]) {
+      const suffix = k.slice("SHEET_ID_".length); // clave original, ej "ODONTOVIDA"
+      const key = suffix.toLowerCase();
+      const name = process.env["CLIENT_NAME_" + suffix] || key;
+      clients.push({ key, name, sheetId: process.env[k] });
+      seen.add(key);
+    }
+  }
+  // Compatibilidad: si existe la variable antigua SHEET_ID, se incluye como "odontovida".
+  if (process.env.SHEET_ID && !seen.has("odontovida")) {
+    clients.push({
+      key: "odontovida",
+      name: process.env.CLIENT_NAME_ODONTOVIDA || "Clínica Odontovida",
+      sheetId: process.env.SHEET_ID,
+    });
+  }
+  clients.sort((a, b) => a.name.localeCompare(b.name, "es"));
+  return clients;
+}
+
+function getParam(req, name) {
+  if (req.query && req.query[name] !== undefined) return req.query[name];
+  try {
+    return new URL(req.url, "http://x").searchParams.get(name);
+  } catch (e) {
+    return null;
+  }
+}
+
 module.exports = async (req, res) => {
   res.setHeader("Cache-Control", "s-maxage=300, stale-while-revalidate=60");
   try {
-    const sheetId = process.env.SHEET_ID;
-    if (!sheetId) throw new Error("Falta SHEET_ID en las variables de entorno.");
+    const clients = getClients();
+    if (clients.length === 0) {
+      throw new Error("No hay clientes configurados. Agrega variables SHEET_ID_<CLIENTE> en Vercel.");
+    }
+
+    // Modo lista: devuelve solo la lista de clientes (sin el sheetId) para poblar el selector.
+    if (getParam(req, "list") === "1") {
+      res.status(200).json({ ok: true, clients: clients.map((c) => ({ key: c.key, name: c.name })) });
+      return;
+    }
+
+    // Cliente solicitado (o el primero por defecto).
+    const requested = String(getParam(req, "client") || "").toLowerCase();
+    const client = clients.find((c) => c.key === requested) || clients[0];
+    const sheetId = client.sheetId;
+
     const accessToken = await getAccessToken();
 
     const titles = await fetchSheetTitles(accessToken, sheetId);
@@ -292,7 +345,7 @@ module.exports = async (req, res) => {
 
     if (daily.length === 0) {
       throw new Error(
-        "Se conectó a Google Sheets pero no se reconoció ninguna tabla diaria. Pestañas revisadas: " +
+        `Se conectó al Sheets de "${client.name}" pero no se reconoció ninguna tabla diaria. Pestañas revisadas: ` +
           JSON.stringify(debugInfo)
       );
     }
@@ -305,7 +358,14 @@ module.exports = async (req, res) => {
       ultimaAgenda = null;
     }
 
-    res.status(200).json({ ok: true, daily, ultimaAgenda, syncedAt: new Date().toISOString(), debug: debugInfo });
+    res.status(200).json({
+      ok: true,
+      client: { key: client.key, name: client.name },
+      daily,
+      ultimaAgenda,
+      syncedAt: new Date().toISOString(),
+      debug: debugInfo,
+    });
   } catch (err) {
     res.status(500).json({ ok: false, error: String(err && err.message ? err.message : err) });
   }
