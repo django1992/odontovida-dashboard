@@ -294,6 +294,7 @@ function aggregateExact(daily, start, end) {
 }
 
 const FUNNEL_STAGES = [
+  { key: "cmi", label: "Conversaciones" },
   { key: "agendas", label: "Agendas" },
   { key: "citas", label: "Citas" },
   { key: "asistencias", label: "Asistencias" },
@@ -381,12 +382,13 @@ function Dashboard() {
   const isFullRange = range.start === FIRST_DATE && range.end === LAST_DATE;
 
   const funnelValues = {
+    cmi: data.cmi,
     agendas: data.agendas,
     citas: data.citas,
     asistencias: data.asistencias,
     cierres: data.cierres,
   };
-  const funnelMax = data.agendas || 1;
+  const funnelMax = data.cmi || data.agendas || 1;
 
   return (
     <div style={styles.page}>
@@ -506,12 +508,12 @@ function Dashboard() {
               const val = funnelValues[s.key];
               const width = Math.max(8, (val / funnelMax) * 100);
               const prevVal = i === 0 ? val : funnelValues[FUNNEL_STAGES[i - 1].key];
-              const dropPct = prevVal ? (100 - (val / prevVal) * 100).toFixed(0) : 0;
+              const convPct = prevVal ? ((val / prevVal) * 100).toFixed(0) : 100;
               return (
                 <div key={s.key} style={styles.funnelRow}>
                   <div style={styles.funnelLabelCol}>
+                    <div style={styles.funnelPct}>{i === 0 ? "100%" : convPct + "%"}</div>
                     <div style={styles.funnelLabel}>{s.label}</div>
-                    {i > 0 && <div style={styles.funnelDrop}>− {dropPct}%</div>}
                   </div>
                   <div style={styles.funnelTrack}>
                     <div style={{ ...styles.funnelBar, width: width + "%" }}>
@@ -675,7 +677,8 @@ const styles = {
   funnelWrap: { display: "flex", flexDirection: "column", gap: 14 },
   funnelRow: { display: "flex", alignItems: "center", gap: 12 },
   funnelLabelCol: { width: 128, flexShrink: 0 },
-  funnelLabel: { fontSize: 12.5, color: "#12201F", fontWeight: 500 },
+  funnelPct: { fontFamily: "'IBM Plex Mono', monospace", fontSize: 15, fontWeight: 600, color: "#0E7C7B" },
+  funnelLabel: { fontSize: 12, color: "#5B6E6B", fontWeight: 500, marginTop: 1 },
   funnelDrop: { fontFamily: "'IBM Plex Mono', monospace", fontSize: 10.5, color: "#B54A3F", marginTop: 2 },
   funnelTrack: { flex: 1, background: "#EEF3F2", borderRadius: 8, height: 34, position: "relative" },
   funnelBar: { height: "100%", background: "linear-gradient(90deg, #0E7C7B, #3FA796)", borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "flex-end", paddingRight: 10, minWidth: 34, transition: "width .4s ease" },
